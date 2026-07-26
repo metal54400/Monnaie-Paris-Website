@@ -1,0 +1,67 @@
+name: Deploy to Production & Release
+
+on:
+  push:
+    branches:
+      - main
+
+# Permissions nécessaires pour créer des releases et tags
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.vars.outputs.sha }}
+      commit_msg: ${{ steps.vars.outputs.msg }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Nécessaire pour l'historique des commits
+
+      - name: Set Output Variables
+        id: vars
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+
+      - name: Install rsync & sshpass
+        run: sudo apt-get install -y rsync sshpass
+
+      - name: Deploy via rsync
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.env' \
+            --exclude='node_modules/' \
+            --exclude='*.log' \
+            --exclude='inc/uploads/avatars/*.webp' \
+            --exclude='inc/uploads/avatars/*.png' \
+            --exclude='inc/uploads/avatars/*.jpg' \
+            -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
+            ./ \
+            root@5.48.143.126:/var/www/monaieparis/
+
+      - name: Post-deploy (composer, permissions, reload)
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
+            root@5.48.143.126 bash -s <<'REMOTE'
+          cd /var/www/monaieparis
+          composer install --no-dev --optimize-autoloader --no-interaction
+          chown -R www-data:www-data /var/www/monaieparis
+          chmod -R 755 /var/www/monaieparis
+          chmod -R 775 /var/www/monaieparis/
+          for svc in nginx apache2 php8.4-fpm php8.3-fpm php8.2-fpm php8.1-fpm php-fpm; do
+              systemctl is-active --quiet "$svc" 2>/dev/null && systemctl reload "$svc" && echo "✅ $svc rechargé" || true
+          done
+          exit 0
+          REMOTE
+
+ 
