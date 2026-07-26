@@ -27,9 +27,9 @@ sshpass -p "$SERVER_PASS" rsync -avz --delete \
     --exclude='.env' \
     --exclude='node_modules/' \
     --exclude='*.log' \
-    --exclude='inc/uploads/avatars/*.webp' \
-    --exclude='inc/uploads/avatars/*.png' \
-    --exclude='inc/uploads/avatars/*.jpg' \
+    --exclude='data/*.sqlite' \
+    --exclude='uploads/*.png' \
+    --exclude='uploads/*.jpg' \
     -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
     "$LOCAL_PATH/" \
     "$SERVER_USER@$SERVER_IP:$REMOTE_PATH/"
